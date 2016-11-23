@@ -1,0 +1,5 @@
+[aws]
+aws_access_key_id: dgasasgasdgas
+aws_secret_access_key: asdfasdfasasd
+region_name: ap-southeast-1
+databases: test

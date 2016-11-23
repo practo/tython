@@ -1,0 +1,4 @@
+venv/*
+app/config.ini
+tmp/*.log
+*.pyc
