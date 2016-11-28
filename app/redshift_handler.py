@@ -342,3 +342,17 @@ class RedshiftHandler:
             print err
             sys.exit(1)
         redshift.close()
+
+    def update_data_using_binlog(self):
+        redshift = psycopg2.connect(
+            database=conf.get('redshift', 'db'),
+            user=conf.get('redshift', 'user'),
+            password=conf.get('redshift', 'password'),
+            host=conf.get('redshift', 'host'),
+            port=conf.get('redshift', 'port'),
+        )
+        redshift.autocommit = True
+        redshift_cursor = redshift.cursor()
+        redshift_cursor.execute("SET search_path TO 'hireninja'")
+        bin_log_file = open('/Users/sandeep/Documents/project/code/experiments/tython/tmp/bin.log', 'rb')
+        redshift_cursor.execute(bin_log_file.read())

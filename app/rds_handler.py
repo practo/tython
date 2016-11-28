@@ -9,6 +9,7 @@ import MySQLdb.cursors
 import _mysql_exceptions
 import sys
 from datetime import datetime
+import os
 import math
 import csv
 
@@ -21,22 +22,13 @@ conn = boto3.client('rds',
                     region_name=conf.get('aws', 'region_name'))
 suffix = '1479893180'
 tables = ["applicant_profile", "applicant_profile_version", "applicant_status", "applicants",
-                  "applicants_version", "candidate_metadata", "companies", "cv_status", "degrees", "feature_request",
-                  "interview_details", "interview_details_version", "interview_status", "interview_type",
-                  "interviewer_interview_relations", "interviewer_status", "load_data", "project_requisition_relations",
-                  "projects", "requisition", "roles", "rounds", "sources", "test", "transaction", "universities",
-                  "user_requisition_relations", "users"]
-# columns = {
-#     "applicant_profile" : ["id","applicant_id","recruiter_box_id","name","contact","email","experience","location","degree_id","university_id","current_company_id","previous_company_1_id","previous_company_2_id"],
-#     "applicant_profile_version": ["id","applicant_id","recruiter_box_id","name","contact","email","experience","location","degree_id","university_id","current_company_id","previous_company_1_id","previous_company_2_id","applicants_profile_version_id","transaction_id","operation_type","end_transaction_id"],
-#     "applicant_status":["id","name"],
-#     "applicants":["id","recruiter_box_id","project_id","source_id","cv_shared_date","cv_status_id","applicant_status_id","cv_screening_date","recruiter_id","requisition_id","name","email","referrer_email","applicant_status_populated_from"],
-#     "applicant_version":["id","recruiter_box_id","project_id","requisition_id","source_id","cv_shared_date","cv_status_id","applicant_status_id","cv_screening_date","recruiter_id","transaction_id","operation_type","end_transaction_id","applicants_version_id","name","email","referrer_email","applicant_status_populated_from"],
-#     "candidate_metadata":["id","applicant_id","key","value"],
-#     "companies":["id","name"],
-#
-#
-# }
+          "applicants_version", "candidate_metadata", "companies", "cv_status", "degrees", "feature_request",
+          "interview_details", "interview_details_version", "interview_status", "interview_type",
+          "interviewer_interview_relations", "interviewer_status", "load_data", "project_requisition_relations",
+          "projects", "requisition", "roles", "rounds", "sources", "test", "transaction", "universities",
+          "user_requisition_relations", "users"]
+
+
 class RdsHandler:
     def get_snapshot_list(object):
         snapshots = conn.describe_db_snapshots(
@@ -70,15 +62,16 @@ class RdsHandler:
                 cursorclass=MySQLdb.cursors.DictCursor)
             for table in tables:
                 rds_cursor = rds.cursor()
-                rds_cursor.execute("select group_concat(COLUMN_NAME) as columns from information_schema.COLUMNS where TABLE_SCHEMA = \"hireninja\" and TABLE_NAME = \"" + table + "\"");
+                rds_cursor.execute(
+                    "select group_concat(COLUMN_NAME) as columns from information_schema.COLUMNS where TABLE_SCHEMA = \"hireninja\" and TABLE_NAME = \"" + table + "\"");
                 column = rds_cursor.fetchall()
                 column = column[0]["columns"]
                 column = column.split(',')
                 column_val = []
                 for col in column:
-                    column_val.append("`"+col+"`")
+                    column_val.append("`" + col + "`")
                 print "select " + ",".join(column_val) + " from " + table
-                rds_cursor.execute("select "+",".join(column_val)+" from " + table);
+                rds_cursor.execute("select " + ",".join(column_val) + " from " + table);
                 result = rds_cursor.fetchall()
                 fp = open("/Users/sandeep/Documents/project/code/experiments/tython/csv_files/" + table + ".csv", "wb")
                 for row in result:
@@ -117,12 +110,12 @@ class RdsHandler:
 
     def upload_csv_files_to_s3(self):
         s3 = boto3.client('s3',
-                          aws_access_key_id=conf.get('aws','aws_access_key_id'),
-                          aws_secret_access_key=conf.get('aws','aws_secret_access_key'),
+                          aws_access_key_id=conf.get('aws', 'aws_access_key_id'),
+                          aws_secret_access_key=conf.get('aws', 'aws_secret_access_key'),
                           region_name=conf.get('aws', 'region_name')
                           )
         for table in tables:
-            tempfile = "/Users/sandeep/Documents/project/code/experiments/tython/csv_files/"+ table + ".csv"
+            tempfile = "/Users/sandeep/Documents/project/code/experiments/tython/csv_files/" + table + ".csv"
             fil = open(tempfile, "rb")
             s3_path = "tipocaData/bckp_" + suffix + "/" + table
             response = s3.put_object(
@@ -131,3 +124,17 @@ class RdsHandler:
                 ACL="private",
                 Body=fil
             )
+
+    def read_write_binlog_file(self, start_time):
+        cursor = None
+        mysql_bin_log_command = "mysqlbinlog -v \
+                --read-from-remote-server \
+                --host=test\
+                --port=3306  \
+                --user test \
+                --password=test#\
+                --stop-never \
+                --start-datetime=\"" + str(start_time) + "\" \
+                --result-file=/Users/sandeep/Documents/project/code/experiments/tython/tmp/bin.log \
+                mysql-bin-changelog.001879"
+        os.system(mysql_bin_log_command)
