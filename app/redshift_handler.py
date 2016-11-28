@@ -354,5 +354,8 @@ class RedshiftHandler:
         redshift.autocommit = True
         redshift_cursor = redshift.cursor()
         redshift_cursor.execute("SET search_path TO 'hireninja'")
-        bin_log_file = open('/Users/sandeep/Documents/project/code/experiments/tython/tmp/bin.log', 'rb')
-        redshift_cursor.execute(bin_log_file.read())
+        with open('/Users/sandeep/Documents/project/code/experiments/tython/tmp/bin.log', 'rb') as f:
+            for line in f:
+                if (line.startswith("INSERT") or \
+                        line.startswith("insert")) and 'mysql' not in line:
+                    redshift_cursor.execute(line)
