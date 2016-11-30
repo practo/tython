@@ -21,13 +21,6 @@ conn = boto3.client('rds',
                         'aws', 'aws_secret_access_key'),
                     region_name=conf.get('aws', 'region_name'))
 suffix = '1479893180'
-tables = ["applicant_profile", "applicant_profile_version", "applicant_status", "applicants",
-          "applicants_version", "candidate_metadata", "companies", "cv_status", "degrees", "feature_request",
-          "interview_details", "interview_details_version", "interview_status", "interview_type",
-          "interviewer_interview_relations", "interviewer_status", "load_data", "project_requisition_relations",
-          "projects", "requisition", "roles", "rounds", "sources", "test", "transaction", "universities",
-          "user_requisition_relations", "users"]
-
 
 class RdsHandler:
     def get_snapshot_list(object):
@@ -60,6 +53,10 @@ class RdsHandler:
                 port=int(conf.get('hireninja', 'port')),
                 db=conf.get('hireninja', 'db'),
                 cursorclass=MySQLdb.cursors.DictCursor)
+            rds_cursor = rds.cursor()
+            rds_cursor.execute("select group_concat(TABLE_NAME) as tables from information_schema.tables where TABLE_SCHEMA = \"hireninja\"")
+            tables = rds_cursor.fetchall()[0]['tables'].split(',')
+            tables.pop(0)
             for table in tables:
                 rds_cursor = rds.cursor()
                 rds_cursor.execute(
