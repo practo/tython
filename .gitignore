@@ -1,4 +1,6 @@
 venv/*
-app/config.ini
+app/config/config.ini
 tmp/*.log
 *.pyc
+csv_files/
+.idea/

@@ -2,16 +2,16 @@
 # Class containgin all the required methods for data differential extractions
 ##
 
-import rds_handler, redshift_handler
 import time
-from datetime import datetime, date
-import dateutil.parser
+from datetime import datetime
+from helpers import rds_handler, redshift_handler
+
+from app.helpers import rds_handler
+
 
 def create_rds_snapshot_instance():
     print("Creating rds instance using snapshot")
-    rds_handler_object = rds_handler.RdsHandler()
-    redshift_handler_object = redshift_handler.RedshiftHandler()
-    latest_snapshot = rds_handler_object.get_snapshot_list()
+    latest_snapshot = rds_handler.get_snapshot_list()
     print latest_snapshot
     print latest_snapshot["SnapshotCreateTime"]
     print time.mktime(latest_snapshot["SnapshotCreateTime"].timetuple())
@@ -23,4 +23,4 @@ def create_rds_snapshot_instance():
     #rds_handler_object.upload_csv_files_to_s3()
     #redshift_handler_object.upload_csv_redshift()
     #rds_handler_object.read_write_binlog_file(timeStamp)
-    redshift_handler_object.update_data_using_binlog()
+    #redshift_handler_object.update_data_using_binlog()
