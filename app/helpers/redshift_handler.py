@@ -14,6 +14,7 @@ conn = boto3.client('rds',
                     aws_secret_access_key=conf['aws']['aws_secret_access_key'],
                     region_name=conf['aws']['region_name'])
 
+
 def get_redshift_conn(autocommit=True):
     redshift_conn = psycopg2.connect(
         database=conf["redshift"]["db"],
@@ -24,6 +25,11 @@ def get_redshift_conn(autocommit=True):
     )
     redshift_conn.autocommit = autocommit
     return redshift_conn
+
+
+def close_redshift_conn(redshift_conn):
+    redshift_conn.close()
+
 
 def create_redshift_schema(db_name):
     include_tables = rds_handler.get_db_tables(db_name)
@@ -110,24 +116,22 @@ def create_redshift_schema(db_name):
         for statement in dds_statements:
             print statement
             redshift_cursor.execute(statement)
-        redshift_conn.close()
+        close_redshift_conn(redshift_conn)
     except psycopg2.Error, err:
         print err
-        redshift_conn.close()
+        close_redshift_conn(redshift_conn)
         sys.exit(1)
 
 
 def upload_csv_redshift(db_name):
     try:
-        # truncate_table_query = "truncate " + db_name + "_" + suffix + "." + table_name
-        # truncate table to avoid duplicates
-        # redshift_cursor.execute(truncate_table_query)
         tables = rds_handler.get_db_tables(db_name)
         redshift_conn = get_redshift_conn()
         for table_name in tables:
             redshift_cursor = redshift_conn.cursor()
             sql = "COPY " + db_name + "." + table_name + " FROM " + \
-                  "'s3://" + conf['aws']['bucket'] + conf['aws']['s3_path'] + config.suffix + "/" + table_name + "' CREDENTIALS " + \
+                  "'s3://" + conf['aws']['bucket'] + conf['aws'][
+                      's3_path'] + config.suffix + "/" + table_name + "' CREDENTIALS " + \
                   "'aws_access_key_id=" + conf['aws']['aws_access_key_id'] + \
                   ";aws_secret_access_key=" + conf['aws']['aws_secret_access_key'] + "' " + \
                   "FORMAT AS CSV QUOTE AS '\"' DELIMITER ',' EMPTYASNULL"
@@ -135,10 +139,11 @@ def upload_csv_redshift(db_name):
             print sql
             redshift_cursor.execute(sql)
             redshift_cursor.close()
+        close_redshift_conn(redshift_conn)
     except psycopg2.Error, err:
         print err
+        close_redshift_conn(redshift_conn)
         sys.exit(1)
-        redshift_conn.close()
 
 
 def update_data_using_binlog(db_name):
@@ -149,9 +154,9 @@ def update_data_using_binlog(db_name):
         host=conf['redshift']['host'],
         port=conf['redshift']['port'],
     )
-    redshift.autocommit = True # change this to differential commit
+    redshift.autocommit = True  # change this to differential commit
     redshift_cursor = redshift.cursor()
-    redshift_cursor.execute("SET search_path TO '"+db_name+"'")
+    redshift_cursor.execute("SET search_path TO '" + db_name + "'")
     with open('/Users/sandeep/Documents/project/code/experiments/tython/tmp/bin.log', 'rb') as f:
         for line in f:
             if (line.startswith("INSERT") or \

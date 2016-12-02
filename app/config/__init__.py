@@ -10,4 +10,4 @@ def read_config_yml():
 
 configuration = read_config_yml()
 
-suffix = time.time()
+suffix = str(time.time()).split(".")[0]

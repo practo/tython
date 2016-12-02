@@ -5,7 +5,6 @@
 import os
 import sys
 from datetime import datetime
-
 import MySQLdb
 import MySQLdb.cursors
 import _mysql_exceptions
@@ -18,35 +17,42 @@ conn = boto3.client('rds',
                     aws_access_key_id=conf['aws']['aws_access_key_id'],
                     aws_secret_access_key=conf['aws']['aws_secret_access_key'],
                     region_name=conf['aws']['region_name'])
+suffix = config.suffix
 
-def get_rds_db_cursor():
+
+def get_rds_db_conn(db_name):
     try:
-        dbConf = conf['hireninja']
+        db_conf = conf['rds'][db_name]
         rds = MySQLdb.connect(
-            user=dbConf['user'],
-            passwd=dbConf['password'],
-            host=dbConf['host'],
-            port=dbConf['port'],
-            db=dbConf['db'],
+            user=db_conf['user'],
+            passwd=db_conf['password'],
+            host=db_conf['host'],
+            port=db_conf['port'],
+            db=db_conf['db'],
             cursorclass=MySQLdb.cursors.DictCursor)
-        rds_cursor = rds.cursor()
-        return rds_cursor
+        return rds
     except _mysql_exceptions.Error, err:
         print(err)
         sys.exit(1)
+
 
 def get_db_tables(db_name):
     try:
-        rds_cursor = get_rds_db_cursor()
+        rds = get_rds_db_conn(db_name)
+        rds_cursor = rds.cursor()
         rds_cursor.execute(
             "select group_concat(TABLE_NAME) as tables from information_schema.tables \
-            where TABLE_SCHEMA = \""+db_name+"\"")
+            where TABLE_SCHEMA = \"" + db_name + "\"")
         tables = rds_cursor.fetchall()[0]['tables'].split(',')
         rds_cursor.close()
+        rds.close()
         return tables
     except _mysql_exceptions.Error, err:
         print(err)
+        rds_cursor.close()
+        rds.close()
         sys.exit(1)
+
 
 def get_snapshot_list(db_name):
     snapshots = conn.describe_db_snapshots(
@@ -70,16 +76,16 @@ def create_rds_instance_from_snapshot(db_name, latest_snapshot):
     print response
 
 
-def generate_data_csv_file():
-    cursor = None
+def generate_data_csv_file(db_name):
     try:
-        tables = get_db_tables()
+        tables = get_db_tables(db_name)
         tables.pop(0)
+        rds = get_rds_db_conn(db_name)
         for table in tables:
-            rds_cursor = get_rds_db_cursor()
+            rds_cursor = rds.cursor()
             rds_cursor.execute(
                 "select group_concat(COLUMN_NAME) as columns from information_schema.COLUMNS \
-                where TABLE_SCHEMA = \"hireninja\" and TABLE_NAME = \"" + table + "\"");
+                where TABLE_SCHEMA = \"" + db_name + "\" and TABLE_NAME = \"" + table + "\"");
             column = rds_cursor.fetchall()
             column = column[0]["columns"]
             column = column.split(',')
@@ -89,7 +95,7 @@ def generate_data_csv_file():
             print "select " + ",".join(column_val) + " from " + table
             rds_cursor.execute("select " + ",".join(column_val) + " from " + table);
             result = rds_cursor.fetchall()
-            fp = open("/Users/sandeep/Documents/project/code/experiments/tython/csv_files/" + table + ".csv", "wb")
+            fp = open(conf['csv']['path'] + table + ".csv", "wb")
             for row in result:
                 col_data = []
                 for col in column:
@@ -120,40 +126,37 @@ def generate_data_csv_file():
                 fp.write(row_csv.encode('utf-8'))
             fp.close()
             rds_cursor.close()
+            rds.close()
     except _mysql_exceptions.Error, err:
         print(err)
+        rds_cursor.close()
+        rds.close()
         sys.exit(1)
 
 
-def upload_csv_files_to_s3():
-    s3 = boto3.client('s3',
-                      aws_access_key_id=conf.get('aws', 'aws_access_key_id'),
-                      aws_secret_access_key=conf.get('aws', 'aws_secret_access_key'),
-                      region_name=conf.get('aws', 'region_name')
-                      )
-    tables = get_db_tables()
-    for table in tables:
-        tempfile = conf['csv']['path'] + table + ".csv"
-        fil = open(tempfile, "rb")
-        s3_path = "tipocaData/bckp_" + suffix + "/" + table
-        response = s3.put_object(
-            Bucket=conf.get('aws', 'bucket'),
-            Key=s3_path,
-            ACL="private",
-            Body=fil
-        )
+def read_write_binlog_file(start_time, db_name):
+    try:
+        rds = get_rds_db_conn(db_name)
+        rds_cursor = rds.cursor()
+        bin_log_files = rds_cursor.execute("SHOW BINARY LOGS")
+        bin_log_files = bin_log_files.fetchall()[0]
+        start_file = bin_log_files["Log_name"]
+        rds_cursor.close()
+        rds.close()
+    except _mysql_exceptions, err:
+        print(err)
+        rds_cursor.close()
+        rds.close()
+        sys(1)
 
-
-def read_write_binlog_file(start_time, start_file, db_name):
-    cursor = None
     mysql_bin_log_command = "mysqlbinlog -v \
                 --read-from-remote-server \
-                --host="+ config['rds'][db_name]['host']\
-                +"--port="+ config['rds'][db_name]['port']\
-                +"--user="+ config['rds'][db_name]['user']\
-                +"--password="+ config['rds'][db_name]['password']\
-                +"--stop-never \
+                --host=" + config['rds'][db_name]['host'] \
+                            + "--port=" + config['rds'][db_name]['port'] \
+                            + "--user=" + config['rds'][db_name]['user'] \
+                            + "--password=" + config['rds'][db_name]['password'] \
+                            + "--stop-never \
                 --start-datetime=\"" + str(start_time) + "\" \
-                --result-file="+ config['binglog']['directory']\
-                + start_file
+                --result-file=" + config['binlog']['path'] \
+                            + start_file
     os.system(mysql_bin_log_command)
