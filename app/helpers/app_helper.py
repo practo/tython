@@ -1,4 +1,3 @@
-
 import optparse
 
 def __get_comma_separated_args(option, opt, value, parser):

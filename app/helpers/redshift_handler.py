@@ -1,48 +1,35 @@
 import math
 import sys
-
-import MySQLdb
-import MySQLdb.cursors
 import _mysql_exceptions
 import boto3
 import psycopg2
+import rds_handler
+import reserved
 
-from app.config import config
+from app import config
 
-conf = config.get_config()
+conf = config.configuration
 conn = boto3.client('rds',
-                    aws_access_key_id=conf.get('aws', 'aws_access_key_id'),
-                    aws_secret_access_key=conf.get(
-                        'aws', 'aws_secret_access_key'),
-                    region_name=conf.get('aws', 'region_name'))
-suffix = '1479893180'
+                    aws_access_key_id=conf['aws']['aws_access_key_id'],
+                    aws_secret_access_key=conf['aws']['aws_secret_access_key'],
+                    region_name=conf['aws']['region_name'])
 
-tables = ["applicant_profile", "applicant_profile_version", "applicant_status", "applicants",
-          "applicants_version", "candidate_metadata", "companies", "cv_status", "degrees", "feature_request",
-          "interview_details", "interview_details_version", "interview_status", "interview_type",
-          "interviewer_interview_relations", "interviewer_status", "load_data", "project_requisition_relations",
-          "projects", "requisition", "roles", "rounds", "sources", "test", "transaction", "universities",
-          "user_requisition_relations", "users"]
+def get_redshift_conn(autocommit=True):
+    redshift_conn = psycopg2.connect(
+        database=conf["redshift"]["db"],
+        user=conf["redshift"]["user"],
+        password=conf["redshift"]["password"],
+        host=conf["redshift"]["host"],
+        port=conf["redshift"]["port"]
+    )
+    redshift_conn.autocommit = autocommit
+    return redshift_conn
 
-
-def create_redshift_schema(object):
-    include_tables = ["applicant_profile", "applicant_profile_version", "applicant_status", "applicants",
-                      "applicants_version", "candidate_metadata", "companies", "cv_status", "degrees",
-                      "feature_request", "interview_details", "interview_details_version", "interview_status",
-                      "interview_type", "interviewer_interview_relations", "interviewer_status", "load_data",
-                      "project_requisition_relations", "projects", "requisition", "roles", "rounds", "sources",
-                      "test", "transaction", "universities", "user_requisition_relations", "users"]
-    schema_name = "hireninja"
+def create_redshift_schema(db_name):
+    include_tables = rds_handler.get_db_tables(db_name)
     print "Generating Schema DDS and Selector SQL Statements"
     try:
-        rds = MySQLdb.connect(
-            user=conf.get('hireninja', 'user'),
-            passwd=conf.get('hireninja', 'password'),
-            host=conf.get('hireninja', 'host'),
-            port=int(conf.get('hireninja', 'port')),
-            db=conf.get('hireninja', 'db'),
-            cursorclass=MySQLdb.cursors.DictCursor)
-        rds_cursor = rds.cursor()
+        rds_cursor = rds_handler.get_db_tables(db_name)
         rds_cursor.execute("SELECT c.*, t.TABLE_ROWS, " +
                            "ceil(((t.data_length+t.index_length)/(1024*1024))) as T_SIZE, " +
                            "if(t.TABLE_ROWS > 0,ceil(ceil(((t.data_length+t.index_length)))/t.TABLE_ROWS),0) as R_SIZE FROM " +
@@ -60,188 +47,8 @@ def create_redshift_schema(object):
         print err
         sys.exit(1)
     dds_statements = []
-    select_statements = []
-    redshift_reserved = [
-        "AES128",
-        "AES256",
-        "ALL",
-        "ALLOWOVERWRITE",
-        "ANALYSE",
-        "ANALYZE",
-        "AND",
-        "ANY",
-        "ARRAY",
-        "AS",
-        "ASC",
-        "AUTHORIZATION",
-        "BACKUP",
-        "BETWEEN",
-        "BINARY",
-        "BLANKSASNULL",
-        "BOTH",
-        "BYTEDICT",
-        "CASE",
-        "CAST",
-        "CHECK",
-        "COLLATE",
-        "COLUMN",
-        "CONSTRAINT",
-        "CREATE",
-        "CREDENTIALS",
-        "CROSS",
-        "CURRENT_DATE",
-        "CURRENT_TIME",
-        "CURRENT_TIMESTAMP",
-        "CURRENT_USER",
-        "CURRENT_USER_ID",
-        "DEFAULT",
-        "DEFERRABLE",
-        "DEFLATE",
-        "DEFRAG",
-        "DELTA",
-        "DELTA32K",
-        "DESC",
-        "DISABLE",
-        "DISTINCT",
-        "DO",
-        "ELSE",
-        "EMPTYASNULL",
-        "ENABLE",
-        "ENCODE",
-        "ENCRYPT",
-        "ENCRYPTION",
-        "END",
-        "EXCEPT",
-        "EXPLICIT",
-        "FALSE",
-        "FOR",
-        "FOREIGN",
-        "FREEZE",
-        "FROM",
-        "FULL",
-        "GLOBALDICT256",
-        "GLOBALDICT64K",
-        "GRANT",
-        "GROUP",
-        "GZIP",
-        "HAVING",
-        "IDENTITY",
-        "IGNORE",
-        "ILIKE",
-        "IN",
-        "INITIALLY",
-        "INNER",
-        "INTERSECT",
-        "INTO",
-        "IS",
-        "ISNULL",
-        "JOIN",
-        "LEADING",
-        "LEFT",
-        "LIKE",
-        "LIMIT",
-        "LOCALTIME",
-        "LOCALTIMESTAMP",
-        "LUN",
-        "LUNS",
-        "LZO",
-        "LZOP",
-        "MINUS",
-        "MOSTLY13",
-        "MOSTLY32",
-        "MOSTLY8",
-        "NATURAL",
-        "NEW",
-        "NOT",
-        "NOTNULL",
-        "NULL",
-        "NULLS",
-        "OFF",
-        "OFFLINE",
-        "OFFSET",
-        "OLD",
-        "ON",
-        "ONLY",
-        "OPEN",
-        "OR",
-        "ORDER",
-        "OUTER",
-        "OVERLAPS",
-        "PARALLEL",
-        "PARTITION",
-        "PERCENT",
-        "PERMISSIONS",
-        "PLACING",
-        "PRIMARY",
-        "RAW",
-        "READRATIO",
-        "RECOVER",
-        "REFERENCES",
-        "REJECTLOG",
-        "RESORT",
-        "RESTORE",
-        "RIGHT",
-        "SELECT",
-        "SESSION_USER",
-        "SIMILAR",
-        "SOME",
-        "SYSDATE",
-        "SYSTEM",
-        "TABLE",
-        "TAG",
-        "TDES",
-        "TEXT255",
-        "TEXT32K",
-        "THEN",
-        "TO",
-        "TOP",
-        "TRAILING",
-        "TRUE",
-        "TRUNCATECOLUMNS",
-        "UNION",
-        "UNIQUE",
-        "USER",
-        "USING",
-        "VERBOSE",
-        "WALLET",
-        "WHEN",
-        "WHERE",
-        "WITH",
-        "WITHOUT"
-    ]
-    col_map = {
-        "INTEGER": "INTEGER",
-        "INT": "INTEGER",
-        "TINYINT": "SMALLINT",
-        "SMALLINT": "SMALLINT",
-        "MEDIUMINT": "INTEGER",
-        "BIGINT": "BIGINT",
-        "DECIMAL": "DECIMAL",
-        "NUMERIC": "DECIMAL",
-        "FLOAT": "FLOAT",
-        "DOUBLE": "FLOAT",
-        "DATE": "DATE",
-        "TIME": "VARCHAR",
-        "YEAR": "SMALLINT",
-        "DATETIME": "TIMESTAMP",
-        "TIMESTAMP": "TIMESTAMP",
-        "CHAR": "VARCHAR",
-        "VARCHAR": "VARCHAR",
-        "BINARY": "VARCHAR",
-        "VARBINARY": "VARCHAR",
-        "BLOB": "VARCHAR",
-        "TINYBLOB": "VARCHAR",
-        "MEDIUMBLOB": "VARCHAR",
-        "LONGBLOB": "VARCHAR",
-        "TEXT": "VARCHAR",
-        "TINYTEXT": "VARCHAR",
-        "MEDIUMTEXT": "VARCHAR",
-        "LONGTEXT": "VARCHAR",
-        "ENUM": "VARCHAR",
-        "SET": "VARCHAR",
-        "BIT": "VARCHAR",
-        "POLYGON": "UNSUPPORTED",
-    }
+    redshift_reserved = reserved.redshift_reserved
+    col_map = reserved.col_map
     tables = {}
     for row in result:
         table_name = row['TABLE_NAME']
@@ -289,53 +96,40 @@ def create_redshift_schema(object):
             col_def += "(" + str(row['NUMERIC_PRECISION']) + ", " + str(row['NUMERIC_SCALE']) + ")"
         tables[table_name]['col_defs'].append(col_def)
     try:
-        dds_statements.append("CREATE SCHEMA " + schema_name)
+        dds_statements.append("CREATE SCHEMA " + db_name)
         for table_name, table_data in tables.items():
-            dds_statements.append("CREATE TABLE " + schema_name + "." \
+            dds_statements.append("CREATE TABLE " + db_name + "." \
                                   + table_name + " (" + ", ".join(table_data['col_defs']) + ")")
     except Exception, err:
         print err
         sys.exit(1)
 
     try:
-        redshift = psycopg2.connect(
-            database=conf.get("redshift", "db"),
-            user=conf.get("redshift", "user"),
-            password=conf.get("redshift", "password"),
-            host=conf.get("redshift", "host"),
-            port=conf.get("redshift", "port")
-        )
-        redshift.autocommit = True
-        redshift_cursor = redshift.cursor()
+        redshift_conn = get_redshift_conn()
+        redshift_cursor = redshift_conn.cursor()
         for statement in dds_statements:
             print statement
             redshift_cursor.execute(statement)
+        redshift_conn.close()
     except psycopg2.Error, err:
         print err
+        redshift_conn.close()
         sys.exit(1)
 
 
-def upload_csv_redshift(self):
+def upload_csv_redshift(db_name):
     try:
-        redshift = psycopg2.connect(
-            database=conf.get('redshift', 'db'),
-            user=conf.get('redshift', 'user'),
-            password=conf.get('redshift', 'password'),
-            host=conf.get('redshift', 'host'),
-            port=conf.get('redshift', 'port'),
-        )
-        redshift.autocommit = True
         # truncate_table_query = "truncate " + db_name + "_" + suffix + "." + table_name
         # truncate table to avoid duplicates
-        db_name = conf.get('hireninja', 'db')
         # redshift_cursor.execute(truncate_table_query)
+        tables = rds_handler.get_db_tables(db_name)
+        redshift_conn = get_redshift_conn()
         for table_name in tables:
-            redshift_cursor = redshift.cursor()
+            redshift_cursor = redshift_conn.cursor()
             sql = "COPY " + db_name + "." + table_name + " FROM " + \
-                  "'s3://" + conf.get('aws',
-                                      'bucket') + "/tipocaData/bckp_" + suffix + "/" + table_name + "' CREDENTIALS " + \
-                  "'aws_access_key_id=" + conf.get('aws', 'aws_access_key_id') + \
-                  ";aws_secret_access_key=" + conf.get('aws', 'aws_secret_access_key') + "' " + \
+                  "'s3://" + conf['aws']['bucket'] + conf['aws']['s3_path'] + config.suffix + "/" + table_name + "' CREDENTIALS " + \
+                  "'aws_access_key_id=" + conf['aws']['aws_access_key_id'] + \
+                  ";aws_secret_access_key=" + conf['aws']['aws_secret_access_key'] + "' " + \
                   "FORMAT AS CSV QUOTE AS '\"' DELIMITER ',' EMPTYASNULL"
             print("Copying to Redshift table " + table_name)
             print sql
@@ -344,20 +138,20 @@ def upload_csv_redshift(self):
     except psycopg2.Error, err:
         print err
         sys.exit(1)
-    redshift.close()
+        redshift_conn.close()
 
 
-def update_data_using_binlog(self):
+def update_data_using_binlog(db_name):
     redshift = psycopg2.connect(
-        database=conf.get('redshift', 'db'),
-        user=conf.get('redshift', 'user'),
-        password=conf.get('redshift', 'password'),
-        host=conf.get('redshift', 'host'),
-        port=conf.get('redshift', 'port'),
+        database=conf['redshift']['db'],
+        user=conf['redshift']['user'],
+        password=conf['redshift']['password'],
+        host=conf['redshift']['host'],
+        port=conf['redshift']['port'],
     )
-    redshift.autocommit = True
+    redshift.autocommit = True # change this to differential commit
     redshift_cursor = redshift.cursor()
-    redshift_cursor.execute("SET search_path TO 'hireninja'")
+    redshift_cursor.execute("SET search_path TO '"+db_name+"'")
     with open('/Users/sandeep/Documents/project/code/experiments/tython/tmp/bin.log', 'rb') as f:
         for line in f:
             if (line.startswith("INSERT") or \

@@ -2,5 +2,6 @@ venv/*
 app/config/config.ini
 tmp/*.log
 *.pyc
-csv_files/
+csv_files/*.csv
 .idea/
+app/config/config.yml
