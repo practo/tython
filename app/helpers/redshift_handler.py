@@ -13,7 +13,7 @@ conn = boto3.client('rds',
                     aws_access_key_id=conf['aws']['aws_access_key_id'],
                     aws_secret_access_key=conf['aws']['aws_secret_access_key'],
                     region_name=conf['aws']['region_name'])
-
+suffix = config.suffix
 
 def get_redshift_conn(autocommit=True):
     redshift_conn = psycopg2.connect(
@@ -104,9 +104,9 @@ def create_redshift_schema(db_name):
             col_def += "(" + str(row['NUMERIC_PRECISION']) + ", " + str(row['NUMERIC_SCALE']) + ")"
         tables[table_name]['col_defs'].append(col_def)
     try:
-        dds_statements.append("CREATE SCHEMA " + db_name)
+        dds_statements.append("CREATE SCHEMA " + db_name +"_"+ suffix)
         for table_name, table_data in tables.items():
-            dds_statements.append("CREATE TABLE " + db_name + "." \
+            dds_statements.append("CREATE TABLE " + db_name +"_"+ suffix+ "." \
                                   + table_name + " (" + ", ".join(table_data['col_defs']) + ")")
     except Exception, err:
         print err
@@ -132,10 +132,10 @@ def upload_csv_redshift(db_name):
         redshift_conn = get_redshift_conn()
         for table_name in tables:
             redshift_cursor = redshift_conn.cursor()
-            print "uploading table " +  table_name
-            sql = "COPY " + db_name + "." + table_name + " FROM " + \
+            print "uploading table " + table_name
+            sql = "COPY " + db_name+"_"+config.suffix + "." + table_name + " FROM " + \
                   "'s3://" + conf['aws']['bucket'] + "/" +conf['aws'][
-                      's3_path']+ db_name +"_"+ config.suffix + "/" + table_name + "' CREDENTIALS " + \
+                      's3_path']+ db_name + "_" + config.suffix + "/" + table_name + "' CREDENTIALS " + \
                   "'aws_access_key_id=" + conf['aws']['aws_access_key_id'] + \
                   ";aws_secret_access_key=" + conf['aws']['aws_secret_access_key'] + "' " + \
                   "FORMAT AS CSV QUOTE AS '\"' DELIMITER ',' EMPTYASNULL"
@@ -149,19 +149,17 @@ def upload_csv_redshift(db_name):
         close_redshift_conn(redshift_conn)
         sys.exit(1)
 
+def rename_redshift_schema(db_name):
+    redshift_conf = get_redshift_conn(True)
+    redshift_cursor = redshift_conf.cursor()
+    redshift_cursor.execute("DROP SCHEMA "+db_name+" CASCADE;")
+    redshift_cursor.execute("ALTER SCHEMA "+db_name+"_"+config.suffix+" RENAME TO "+db_name+";")
 
 def update_data_using_binlog(db_name):
-    redshift = psycopg2.connect(
-        database=conf['redshift']['db'],
-        user=conf['redshift']['user'],
-        password=conf['redshift']['password'],
-        host=conf['redshift']['host'],
-        port=conf['redshift']['port'],
-    )
-    redshift.autocommit = True  # change this to differential commit
+    redshift = get_redshift_conn(True)
     redshift_cursor = redshift.cursor()
     redshift_cursor.execute("SET search_path TO '" + db_name + "'")
-    with open('/Users/sandeep/Documents/project/code/experiments/tython/tmp/bin.log', 'rb') as f:
+    with open(conf['binlog']['path'], 'rb') as f:
         for line in f:
             if (line.startswith("INSERT") or \
                         line.startswith("insert")) and 'mysql' not in line:

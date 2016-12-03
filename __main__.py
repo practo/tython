@@ -21,6 +21,7 @@ if operation == "copy":
         db_extractor = Extractor(db)
         db_extractor.create_rds_snapshot_instance()
         db_extractor.generate_csv_data()
+        db_extractor.destroy_rds()
 
         db_loader = Loader(db)
         db_loader.generate_redshift_schema()
@@ -28,7 +29,9 @@ if operation == "copy":
         db_loader.upload_csv_redshift()
 
 elif operation == "sync":
-    print "sync"
-    #TODO write all methods required for sync
+    if len(options.db) > 1:
+        print "Only single db sync option is allowed"
+        sys(1)
+
 else:
     print "Select either copy or sync"

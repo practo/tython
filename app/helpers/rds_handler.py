@@ -173,6 +173,16 @@ class rds:
             rds.close()
             sys.exit(1)
 
+    def destroy_rds_instances(self):
+        try:
+            conn.delete_db_instance(
+                DBInstanceIdentifier=self.db_instance_identifier,
+                SkipFinalSnapshot=True
+            )
+        except botocore.exceptions.ClientError as err:
+            print err
+            sys(1)
+
     def read_write_binlog_file(self, start_time):
         try:
             rds = self.get_rds_db_conn()

@@ -19,6 +19,8 @@ class Extractor:
     def generate_csv_data(self):
         self.rds.generate_data_csv_file()
 
+    def destroy_rds(self):
+        self.rds.destroy_rds_instances()
 
 class Loader:
     def __init__(self, db_name):
