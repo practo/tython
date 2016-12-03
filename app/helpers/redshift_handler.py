@@ -32,26 +32,28 @@ def close_redshift_conn(redshift_conn):
 
 
 def create_redshift_schema(db_name):
-    include_tables = rds_handler.get_db_tables(db_name)
+    db = rds_handler.rds(db_name)
+    include_tables = db.get_db_tables()
     print "Generating Schema DDS and Selector SQL Statements"
     try:
-        rds_cursor = rds_handler.get_db_tables(db_name)
+        rds = db.get_rds_db_conn()
+        rds_cursor = rds.cursor()
         rds_cursor.execute("SELECT c.*, t.TABLE_ROWS, " +
                            "ceil(((t.data_length+t.index_length)/(1024*1024))) as T_SIZE, " +
                            "if(t.TABLE_ROWS > 0,ceil(ceil(((t.data_length+t.index_length)))/t.TABLE_ROWS),0) as R_SIZE FROM " +
                            "information_schema.columns c LEFT JOIN information_schema.tables t " +
                            "ON t.table_name = c.table_name and t.table_schema = c.table_schema " +
-                           "WHERE t.TABLE_TYPE='BASE TABLE' AND c.table_schema = '" + conf.get('hireninja', 'db') +
+                           "WHERE t.TABLE_TYPE='BASE TABLE' AND c.table_schema = '" + conf['rds'][db_name]['db'] +
                            "' order by c.table_name, c.ordinal_position")
+        result = rds_cursor.fetchall()
+        rds_cursor.close()
+        rds.close()
     except _mysql_exceptions.Error, err:
         print(err)
+        rds_cursor.close()
+        rds.close()
         sys.exit(1)
 
-    try:
-        result = rds_cursor.fetchall()
-    except _mysql_exceptions.Error, err:
-        print err
-        sys.exit(1)
     dds_statements = []
     redshift_reserved = reserved.redshift_reserved
     col_map = reserved.col_map
@@ -125,13 +127,15 @@ def create_redshift_schema(db_name):
 
 def upload_csv_redshift(db_name):
     try:
-        tables = rds_handler.get_db_tables(db_name)
+        rds = rds_handler.rds(db_name)
+        tables = rds.get_db_tables()
         redshift_conn = get_redshift_conn()
         for table_name in tables:
             redshift_cursor = redshift_conn.cursor()
+            print "uploading table " +  table_name
             sql = "COPY " + db_name + "." + table_name + " FROM " + \
-                  "'s3://" + conf['aws']['bucket'] + conf['aws'][
-                      's3_path'] + config.suffix + "/" + table_name + "' CREDENTIALS " + \
+                  "'s3://" + conf['aws']['bucket'] + "/" +conf['aws'][
+                      's3_path']+ db_name +"_"+ config.suffix + "/" + table_name + "' CREDENTIALS " + \
                   "'aws_access_key_id=" + conf['aws']['aws_access_key_id'] + \
                   ";aws_secret_access_key=" + conf['aws']['aws_secret_access_key'] + "' " + \
                   "FORMAT AS CSV QUOTE AS '\"' DELIMITER ',' EMPTYASNULL"

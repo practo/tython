@@ -56,18 +56,20 @@ def get_options():
 
 def upload_csv_files_to_s3(db_name):
     s3 = boto3.client('s3',
-                      aws_access_key_id=conf.get('aws', 'aws_access_key_id'),
-                      aws_secret_access_key=conf.get('aws', 'aws_secret_access_key'),
-                      region_name=conf.get('aws', 'region_name')
+                      aws_access_key_id=conf['aws']['aws_access_key_id'],
+                      aws_secret_access_key=conf['aws']['aws_secret_access_key'],
+                      region_name=conf['aws']['region_name']
                       )
-    tables = rds_handler.get_db_tables(db_name)
+    rds = rds_handler.rds(db_name)
+    tables = rds.get_db_tables()
     try:
         for table in tables:
             tempfile = conf['csv']['path'] + table + ".csv"
             fil = open(tempfile, "rb")
             s3_path = "tipocaData/bckp_" + db_name +"_" + suffix + "/" + table
+            print "copying file " +s3_path
             response = s3.put_object(
-                Bucket=conf.get('aws', 'bucket'),
+                Bucket=conf['aws']['bucket'],
                 Key=s3_path,
                 ACL="private",
                 Body=fil
