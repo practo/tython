@@ -25,4 +25,4 @@ csv:
     path: '/Users/sandeep/Documents/project/code/experiments/tython/csv_files/'
 
 binlog:
-    path: '/Users/sandeep/Documents/project/code/experiments/tython/tmp/'
+    path: '/Users/sandeep/Documents/project/code/experiments/tython/tmp/bin.log'

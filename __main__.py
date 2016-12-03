@@ -2,7 +2,8 @@
 # Startup file tython
 ##
 
-from app import helpers, config, Extractor, Loader
+from app import helpers, config, \
+    Extractor, Loader, Sync
 import sys
 
 conf = config.configuration
@@ -29,9 +30,9 @@ if operation == "copy":
         db_loader.upload_csv_redshift()
 
 elif operation == "sync":
-    if len(options.db) > 1:
-        print "Only single db sync option is allowed"
-        sys(1)
-
+    print "Starting sync"
+    for db in options.dbs:
+        db_sync = Sync(db)
+        db_sync.read_mysql_bin_log()
 else:
     print "Select either copy or sync"

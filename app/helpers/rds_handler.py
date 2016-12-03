@@ -183,29 +183,30 @@ class rds:
             print err
             sys(1)
 
-    def read_write_binlog_file(self, start_time):
+    def get_db_master_status(self):
         try:
             rds = self.get_rds_db_conn()
             rds_cursor = rds.cursor()
-            bin_log_files = rds_cursor.execute("SHOW BINARY LOGS")
-            bin_log_files = bin_log_files.fetchall()[0]
-            start_file = bin_log_files["Log_name"]
+            rds_cursor.execute("SHOW MASTER STATUS")
+            master_status = rds_cursor.fetchall()[0]
             rds_cursor.close()
             rds.close()
+            return master_status
         except _mysql_exceptions, err:
             print(err)
             rds_cursor.close()
             rds.close()
-            sys(1)
+            sys.exit(1)
 
+    def read_write_binlog_file(self, master_status):
         mysql_bin_log_command = "mysqlbinlog -v \
                     --read-from-remote-server \
-                    --host=" + config['rds'][self.db_name]['host'] \
-                                + "--port=" + config['rds'][self.db_name]['port'] \
-                                + "--user=" + config['rds'][self.db_name]['user'] \
-                                + "--password=" + config['rds'][self.db_name]['password'] \
-                                + "--stop-never \
-                    --start-datetime=\"" + str(start_time) + "\" \
-                    --result-file=" + config['binlog']['path'] \
-                                + start_file
+                    --host=" + conf['rds'][self.db_name]['host'] + "\
+                    --port=" + str(conf['rds'][self.db_name]['port']) + " \
+                    --user=" + conf['rds'][self.db_name]['user'] + "\
+                    --password=" + conf['rds'][self.db_name]['password'] + "\
+                    --stop-never --start-position=" + str(master_status['Position']) + "\
+                    --result-file=" + conf['binlog']['path'] + " " +\
+                                str(master_status['File'])
+        print mysql_bin_log_command
         os.system(mysql_bin_log_command)

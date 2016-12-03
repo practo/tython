@@ -25,7 +25,6 @@ class Extractor:
 class Loader:
     def __init__(self, db_name):
         self.db_name = db_name
-        self.rds = rds_handler.rds(db_name)
 
     def generate_redshift_schema(self):
         redshift_handler.create_redshift_schema(self.db_name)
@@ -36,6 +35,17 @@ class Loader:
     def upload_csv_redshift(self):
         redshift_handler.upload_csv_redshift(self.db_name)
 
+class Sync:
+    def __init__(self, db_name):
+        self.db_name = db_name
+        self.rds = rds_handler.rds(db_name)
+
+    def read_mysql_bin_log(self):
+        print "Reading bin logs for "+ self.db_name
+        master_status = self.rds.get_db_master_status()
+        print master_status
+        self.rds.read_write_binlog_file(master_status)
+        #self.rds.read_write_binlog_file()
 # def read_binglog_file(start_time):
 #     rds_handler.read_write_binlog_file(start_time)
 #     #redshift_handler_object.update_data_using_binlog()
