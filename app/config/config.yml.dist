@@ -1,0 +1,28 @@
+aws:
+    aws_access_key_id: asdf
+    aws_secret_access_key: asdfa+8Radfa
+    region_name: ap-southeast-1
+    subnet_group_for_rds: asdgasdg
+    bucket: deasdga
+    s3_path: tipocaData/bckp_
+
+rds:
+    hireninja:
+        user: asdfas
+        password: asdgasdg#
+        host: agas.asdg.ap-southeast-1.asd.asga.asg
+        port: 3306
+        db: asgasd
+
+redshift:
+    host: asga-asg-ag-asdga.asgasasga.sgda.asgas.com
+    port: 5439
+    user: agasdgas
+    password: asdasga
+    db: agasdas
+
+csv:
+    path: '/Users/sandeep/Documents/project/code/experiments/tython/csv_files/'
+
+binlog:
+    path: '/Users/sandeep/Documents/project/code/experiments/tython/tmp/'
